@@ -1,11 +1,10 @@
 # Triagi minimal patch over upstream Postiz image.
-# Removes r_basicprofile scope (deprecated by LinkedIn) from compiled provider files
-# so OAuth connect stops failing with NotEnoughScopes (issue gitroomhq/postiz-app#1197).
+# Rewrite LinkedIn scopes to the minimum subset the Triagi LinkedIn app
+# actually has approved (Sign In OpenID + Share on LinkedIn).
+# Removes dead upstream scope `r_basicprofile` (legacy product LinkedIn
+# discontinued) and the organization scopes (require Marketing Developer
+# Platform which Triagi does not yet have approved).
 FROM ghcr.io/gitroomhq/postiz-app:v2.11.3
 
-RUN set -eux; \
-    matches="$(grep -RIlF 'r_basicprofile' /app 2>/dev/null || true)"; \
-    if [ -n "$matches" ]; then echo "patching files:"; echo "$matches"; echo "$matches" | xargs sed -i "/r_basicprofile/d"; fi; \
-    remaining="$(grep -RIlF 'r_basicprofile' /app 2>/dev/null || true)"; \
-    if [ -n "$remaining" ]; then echo "ERROR: r_basicprofile still present in:"; echo "$remaining"; exit 1; fi; \
-    echo "Patch OK: r_basicprofile removed"
+COPY triagi-patch.js /tmp/triagi-patch.js
+RUN node /tmp/triagi-patch.js && rm /tmp/triagi-patch.js
