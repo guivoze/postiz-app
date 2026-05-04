@@ -1,18 +1,21 @@
 # Triagi minimal patch over upstream Postiz image.
-# Removes r_basicprofile scope (deprecated by LinkedIn) from any file that
-# still references it, so OAuth connect stops failing with NotEnoughScopes
-# (upstream issue gitroomhq/postiz-app#1197).
 FROM ghcr.io/gitroomhq/postiz-app:v2.11.3
 
-# Find every file that mentions r_basicprofile and strip those lines.
+# 1) Strip r_basicprofile (deprecated by LinkedIn).
+# 2) Inject scope-mismatch logging so we can see WHICH scope is missing.
 RUN set -eux; \
     matches="$(grep -RIlF 'r_basicprofile' /app 2>/dev/null || true)"; \
-    if [ -z "$matches" ]; then echo "nothing to patch"; else \
-        echo "patching files:"; echo "$matches"; \
-        echo "$matches" | xargs sed -i "/r_basicprofile/d"; \
-    fi; \
+    if [ -n "$matches" ]; then echo "patching files:"; echo "$matches"; echo "$matches" | xargs sed -i "/r_basicprofile/d"; fi; \
     remaining="$(grep -RIlF 'r_basicprofile' /app 2>/dev/null || true)"; \
-    if [ -n "$remaining" ]; then \
-        echo "ERROR: r_basicprofile still present in:"; echo "$remaining"; exit 1; \
-    fi; \
-    echo "Patch OK: r_basicprofile removed"
+    if [ -n "$remaining" ]; then echo "ERROR: r_basicprofile still present in:"; echo "$remaining"; exit 1; fi; \
+    echo "Patch 1 OK: r_basicprofile removed"; \
+    abstract="$(grep -RIlF 'NotEnoughScopes' /app/apps/backend 2>/dev/null | grep -i social.abstract || true)"; \
+    echo "abstract files:"; echo "$abstract"; \
+    if [ -n "$abstract" ]; then \
+        for f in $abstract; do \
+            sed -i 's|throw new NotEnoughScopes();|do { console.error("[TRIAGI] SCOPES MISMATCH", JSON.stringify({required: required, got: got})); throw new NotEnoughScopes(); } while(0);|g' "$f"; \
+        done; \
+        echo "Patch 2 OK: scope mismatch will now log"; \
+    else \
+        echo "WARN: social.abstract.js not found"; \
+    fi
