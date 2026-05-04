@@ -1,0 +1,10 @@
+# Triagi minimal patch over upstream Postiz image.
+# Removes r_basicprofile scope (deprecated by LinkedIn) from compiled
+# linkedin.provider.js and linkedin.page.provider.js so OAuth connect
+# stops failing with NotEnoughScopes (upstream issue gitroomhq/postiz-app#1197).
+FROM ghcr.io/gitroomhq/postiz-app:v2.11.3
+
+# Patch every compiled JS file that still mentions the dead scope.
+RUN set -eux; \
+    find /app -type f -name "linkedin*.provider.js" -print -exec sed -i "/r_basicprofile/d" {} \; ; \
+    grep -RIn "r_basicprofile" /app/apps /app/libraries 2>/dev/null && (echo "ERROR: r_basicprofile still present"; exit 1) || echo "Patch OK: r_basicprofile removed"

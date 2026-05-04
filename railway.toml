@@ -1,9 +1,7 @@
 [build]
 builder = "DOCKERFILE"
-dockerfilePath = "Dockerfile.dev"
+dockerfilePath = "Dockerfile.triagi"
 
 [deploy]
-startCommand = "echo BOOT && nginx && echo NGINX_OK && pnpm run pm2"
 restartPolicyType = "ON_FAILURE"
 restartPolicyMaxRetries = 3
-healthcheckTimeout = 600
