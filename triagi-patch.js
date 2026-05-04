@@ -8,12 +8,13 @@
 //   2. prompt=none in the OAuth URL breaks first-time auth (no prior consent session).
 //   3. The org scopes (rw_organization_admin, w_organization_social, r_organization_social)
 //      require Community Management API, which can't coexist with Sign In + Share on
-//      LinkedIn on the same LinkedIn app — LinkedIn blocks the OAuth entirely.
+//      LinkedIn on the same LinkedIn app.
 //
 // Fix:
-//   - Rewrite scopes to the minimum that Triagi LinkedIn app actually has approved
-//     (Sign In OpenID + Share on LinkedIn): openid + profile + w_member_social.
+//   - Rewrite scopes to the minimum that Triagi LinkedIn app actually has approved.
 //   - Strip prompt=none from the OAuth URL.
+//   - Insert a debug log line before checkScopes() so we can see EXACTLY what
+//     LinkedIn returned vs what we asked for. (Stripped on next commit when fixed.)
 const fs = require('fs');
 
 const targets = [
@@ -48,6 +49,17 @@ for (const file of targets) {
     changed = true;
   } else {
     console.log('NO prompt=none found in:', file);
+  }
+
+  // Insert debug log on the same line as checkScopes call to keep JS valid.
+  const checkRe = /this\.checkScopes\(this\.scopes, scope\);/g;
+  if (checkRe.test(src)) {
+    src = src.replace(
+      checkRe,
+      'console.log("[TRIAGI-DEBUG] linkedin oauth response scope=", JSON.stringify(scope), "expected=", JSON.stringify(this.scopes)); this.checkScopes(this.scopes, scope);'
+    );
+    console.log('PATCHED debug log inserted:', file);
+    changed = true;
   }
 
   if (changed) {
