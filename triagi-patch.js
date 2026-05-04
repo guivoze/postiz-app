@@ -1,20 +1,5 @@
 #!/usr/bin/env node
-// Triagi patch — fixes Postiz LinkedIn OAuth for self-hosted apps that don't
-// have Marketing Developer Platform / Community Management API approved.
-//
-// Root causes (confirmed by upstream issue gitroomhq/postiz-app#1197 comment
-// from Minifab on 2026-02-22):
-//   1. r_basicprofile is deprecated by LinkedIn (legacy "Sign In with LinkedIn" product gone).
-//   2. prompt=none in the OAuth URL breaks first-time auth (no prior consent session).
-//   3. The org scopes (rw_organization_admin, w_organization_social, r_organization_social)
-//      require Community Management API, which can't coexist with Sign In + Share on
-//      LinkedIn on the same LinkedIn app.
-//
-// Fix:
-//   - Rewrite scopes to the minimum that Triagi LinkedIn app actually has approved.
-//   - Strip prompt=none from the OAuth URL.
-//   - Insert a debug log line before checkScopes() so we can see EXACTLY what
-//     LinkedIn returned vs what we asked for. (Stripped on next commit when fixed.)
+// Triagi patch — debug LinkedIn token exchange response.
 const fs = require('fs');
 
 const targets = [
@@ -36,30 +21,39 @@ for (const file of targets) {
   const scopesRe = /this\.scopes\s*=\s*\[[\s\S]*?\];?/m;
   if (scopesRe.test(src)) {
     src = src.replace(scopesRe, `this.scopes = ${minimalScopes};`);
-    console.log('PATCHED scopes:', file);
     changed = true;
-  } else {
-    console.log('NO SCOPES MATCH:', file);
   }
 
   const promptRe = /&prompt=none/g;
   if (promptRe.test(src)) {
     src = src.replace(promptRe, '');
-    console.log('PATCHED prompt=none removed:', file);
     changed = true;
-  } else {
-    console.log('NO prompt=none found in:', file);
   }
 
-  // Insert debug log on the same line as checkScopes call to keep JS valid.
-  const checkRe = /this\.checkScopes\(this\.scopes, scope\);/g;
-  if (checkRe.test(src)) {
+  // Replace the entire token-exchange-and-destructure block with a debug version
+  // that logs the raw token response BEFORE destructuring.
+  const tokenRe = /const\s*\{\s*access_token:\s*accessToken,\s*expires_in:\s*expiresIn,\s*refresh_token:\s*refreshToken,\s*scope,\s*\}\s*=\s*await\s*\(await\s*fetch\('https:\/\/www\.linkedin\.com\/oauth\/v2\/accessToken',\s*\{[\s\S]*?\}\)\)\.json\(\);/m;
+  if (tokenRe.test(src)) {
     src = src.replace(
-      checkRe,
-      'console.log("[TRIAGI-DEBUG] linkedin oauth response scope=", JSON.stringify(scope), "expected=", JSON.stringify(this.scopes)); this.checkScopes(this.scopes, scope);'
+      tokenRe,
+      `const __triagiTokenResp = await fetch('https://www.linkedin.com/oauth/v2/accessToken', { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body });
+        const __triagiTokenStatus = __triagiTokenResp.status;
+        const __triagiTokenJson = await __triagiTokenResp.json();
+        console.log("[TRIAGI-DEBUG] linkedin token exchange status=", __triagiTokenStatus, "json=", JSON.stringify(__triagiTokenJson));
+        const { access_token: accessToken, expires_in: expiresIn, refresh_token: refreshToken, scope } = __triagiTokenJson;`
     );
-    console.log('PATCHED debug log inserted:', file);
+    console.log('PATCHED token-exchange logger:', file);
     changed = true;
+  } else {
+    console.log('NO TOKEN MATCH (fallback to log only):', file);
+    const checkRe = /this\.checkScopes\(this\.scopes, scope\);/g;
+    if (checkRe.test(src)) {
+      src = src.replace(
+        checkRe,
+        'console.log("[TRIAGI-DEBUG] linkedin oauth response scope=", JSON.stringify(scope), "expected=", JSON.stringify(this.scopes)); this.checkScopes(this.scopes, scope);'
+      );
+      changed = true;
+    }
   }
 
   if (changed) {
