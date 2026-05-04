@@ -3,7 +3,7 @@ builder = "DOCKERFILE"
 dockerfilePath = "Dockerfile.dev"
 
 [deploy]
-startCommand = "set -x; echo BOOT_START $(date -u); nginx; echo NGINX_RC=$?; pnpm run pm2 2>&1"
+startCommand = "echo BOOT && nginx && echo NGINX_OK && pnpm run pm2"
 restartPolicyType = "ON_FAILURE"
 restartPolicyMaxRetries = 3
 healthcheckTimeout = 600
